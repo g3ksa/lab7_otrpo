@@ -1,13 +1,14 @@
 package main
 
 import (
-	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/joho/godotenv"
 
 	"github.com/streadway/amqp"
 	"golang.org/x/net/html"
@@ -26,7 +27,7 @@ func init() {
 	}
 }
 
-func extractAndLogLinks(url string) {
+func extractAndPublishLinks(url string, ch *amqp.Channel, queueName string) {
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Printf("Error fetching URL %s: %s", url, err)
@@ -45,7 +46,21 @@ func extractAndLogLinks(url string) {
 		if n.Type == html.ElementNode && n.Data == "a" {
 			for _, attr := range n.Attr {
 				if attr.Key == "href" {
-					log.Printf("Found link: %s", attr.Val)
+					link := attr.Val
+					log.Printf("Found link: %s", link)
+
+					err := ch.Publish(
+						"",
+						queueName,
+						false,
+						false,
+						amqp.Publishing{
+							ContentType: "text/plain",
+							Body:        []byte(link),
+						})
+					if err != nil {
+						log.Printf("Failed to publish link %s: %s", link, err)
+					}
 				}
 			}
 		}
@@ -81,7 +96,7 @@ func main() {
 	failOnError(err, "Failed to declare a queue")
 
 	msgs, err := ch.Consume(
-		q.Name, // queue
+		q.Name,
 		"",
 		true,
 		false,
@@ -103,7 +118,7 @@ func main() {
 			select {
 			case msg := <-msgs:
 				idleTimeout.Reset(30 * time.Second)
-				extractAndLogLinks(string(msg.Body))
+				extractAndPublishLinks(string(msg.Body), ch, q.Name)
 			case <-idleTimeout.C:
 				log.Println("No messages received in 30 seconds. Exiting...")
 				done <- true

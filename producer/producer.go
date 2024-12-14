@@ -1,13 +1,14 @@
 package main
 
 import (
-	"github.com/joho/godotenv"
-	"github.com/streadway/amqp"
-	"golang.org/x/net/html"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/joho/godotenv"
+	"github.com/streadway/amqp"
+	"golang.org/x/net/html"
 )
 
 func failOnError(err error, msg string) {
@@ -47,8 +48,11 @@ func extractLinks(baseURL string) ([]string, error) {
 			for _, attr := range n.Attr {
 				if attr.Key == "href" {
 					parsed, err := url.Parse(attr.Val)
-					if err == nil && (parsed.Host == "" || parsed.Host == base.Host) {
-						links = append(links, base.ResolveReference(parsed).String())
+					if err == nil {
+						if parsed.Host == "" || parsed.Host == base.Host {
+							resolved := base.ResolveReference(parsed).String()
+							links = append(links, resolved)
+						}
 					}
 				}
 			}
